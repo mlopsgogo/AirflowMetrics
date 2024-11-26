@@ -1,4 +1,5 @@
-version: '3.7'
+version: '3.9'
+
 services:
   postgres:
     image: postgres:13
@@ -6,57 +7,71 @@ services:
       POSTGRES_USER: airflow
       POSTGRES_PASSWORD: airflow
       POSTGRES_DB: airflow
+    ports:
+      - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
 
-  statsd:
-    image: statsd/statsd
-    ports:
-      - "9125:9125/udp"
-
   webserver:
-    image: apache/airflow:2.3.0
+    image: apache/airflow:2.7.0
     depends_on:
       - postgres
-      - statsd
+      - otel-collector
     environment:
-      AIRFLOW__CORE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@postgres/airflow
       AIRFLOW__CORE__EXECUTOR: LocalExecutor
-      AIRFLOW__METRICS__STATSD_ON: 'True'
-      AIRFLOW__METRICS__STATSD_HOST: 'statsd'
-      AIRFLOW__METRICS__STATSD_PORT: '9125'
-      AIRFLOW__METRICS__STATSD_PREFIX: 'airflow'
+      AIRFLOW__CORE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@postgres:5432/airflow
     ports:
       - "8080:8080"
-      - "8000:8000"  # Порт для Prometheus Exporter
     command: >
-      bash -c "pip install prometheus_client &&
-               airflow db init &&
-               airflow webserver"
+      bash -c "airflow db init && exec airflow webserver"
     volumes:
-      - ./dags:/opt/airflow/dags
+      - ./airflow/dags:/opt/airflow/dags
       - ./config/airflow.cfg:/opt/airflow/airflow.cfg
-      - ./plugins:/opt/airflow/plugins  # Монтируем папку с плагинами
 
   scheduler:
-    image: apache/airflow:2.3.0
+    image: apache/airflow:2.7.0
     depends_on:
       - postgres
-      - statsd
+      - otel-collector
     environment:
-      AIRFLOW__CORE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@postgres/airflow
       AIRFLOW__CORE__EXECUTOR: LocalExecutor
-      AIRFLOW__METRICS__STATSD_ON: 'True'
-      AIRFLOW__METRICS__STATSD_HOST: 'statsd'
-      AIRFLOW__METRICS__STATSD_PORT: '9125'
-      AIRFLOW__METRICS__STATSD_PREFIX: 'airflow'
-    command: >
-      bash -c "pip install prometheus_client &&
-               airflow scheduler"
+      AIRFLOW__CORE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@postgres:5432/airflow
+    command: airflow scheduler
     volumes:
-      - ./dags:/opt/airflow/dags
+      - ./airflow/dags:/opt/airflow/dags
       - ./config/airflow.cfg:/opt/airflow/airflow.cfg
-      - ./plugins:/opt/airflow/plugins  # Монтируем папку с плагинами
+
+  otel-collector:
+    image: otel/opentelemetry-collector:latest
+    container_name: otel-collector
+    ports:
+      - "4317:4317" # OpenTelemetry gRPC
+      - "4318:4318" # OpenTelemetry HTTP
+    volumes:
+      - ./config/otel-collector-config.yaml:/etc/otel-collector-config.yaml
+    command: [ "--config=/etc/otel-collector-config.yaml" ]
+
+  victoriametrics:
+    image: victoriametrics/victoria-metrics
+    container_name: victoriametrics
+    ports:
+      - "8428:8428"
+    volumes:
+      - victoriametrics_data:/victoria-metrics-data
+
+  grafana:
+    image: grafana/grafana:latest
+    depends_on:
+      - victoriametrics
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+    volumes:
+      - grafana_data:/var/lib/grafana
 
 volumes:
   postgres_data:
+  victoriametrics_data:
+  grafana_data:

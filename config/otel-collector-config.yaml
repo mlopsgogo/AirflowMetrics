@@ -1,0 +1,19 @@
+receivers:
+  otlp:
+    protocols:
+      http:
+        endpoint: 0.0.0.0:4318
+
+exporters:
+  prometheusremotewrite:
+    endpoint: "http://victoriametrics:8428/api/v1/write"
+
+processors:
+  batch: {}
+
+service:
+  pipelines:
+    metrics:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [prometheusremotewrite]
