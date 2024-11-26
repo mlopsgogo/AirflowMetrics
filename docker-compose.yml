@@ -1,0 +1,62 @@
+version: '3.7'
+services:
+  postgres:
+    image: postgres:13
+    environment:
+      POSTGRES_USER: airflow
+      POSTGRES_PASSWORD: airflow
+      POSTGRES_DB: airflow
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  statsd:
+    image: statsd/statsd
+    ports:
+      - "9125:9125/udp"
+
+  webserver:
+    image: apache/airflow:2.3.0
+    depends_on:
+      - postgres
+      - statsd
+    environment:
+      AIRFLOW__CORE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@postgres/airflow
+      AIRFLOW__CORE__EXECUTOR: LocalExecutor
+      AIRFLOW__METRICS__STATSD_ON: 'True'
+      AIRFLOW__METRICS__STATSD_HOST: 'statsd'
+      AIRFLOW__METRICS__STATSD_PORT: '9125'
+      AIRFLOW__METRICS__STATSD_PREFIX: 'airflow'
+    ports:
+      - "8080:8080"
+      - "8000:8000"  # Порт для Prometheus Exporter
+    command: >
+      bash -c "pip install prometheus_client &&
+               airflow db init &&
+               airflow webserver"
+    volumes:
+      - ./dags:/opt/airflow/dags
+      - ./config/airflow.cfg:/opt/airflow/airflow.cfg
+      - ./plugins:/opt/airflow/plugins  # Монтируем папку с плагинами
+
+  scheduler:
+    image: apache/airflow:2.3.0
+    depends_on:
+      - postgres
+      - statsd
+    environment:
+      AIRFLOW__CORE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@postgres/airflow
+      AIRFLOW__CORE__EXECUTOR: LocalExecutor
+      AIRFLOW__METRICS__STATSD_ON: 'True'
+      AIRFLOW__METRICS__STATSD_HOST: 'statsd'
+      AIRFLOW__METRICS__STATSD_PORT: '9125'
+      AIRFLOW__METRICS__STATSD_PREFIX: 'airflow'
+    command: >
+      bash -c "pip install prometheus_client &&
+               airflow scheduler"
+    volumes:
+      - ./dags:/opt/airflow/dags
+      - ./config/airflow.cfg:/opt/airflow/airflow.cfg
+      - ./plugins:/opt/airflow/plugins  # Монтируем папку с плагинами
+
+volumes:
+  postgres_data:
