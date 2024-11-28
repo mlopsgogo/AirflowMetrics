@@ -7,8 +7,6 @@ services:
       POSTGRES_USER: airflow
       POSTGRES_PASSWORD: airflow
       POSTGRES_DB: airflow
-    ports:
-      - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
 
@@ -44,9 +42,6 @@ services:
   otel-collector:
     image: otel/opentelemetry-collector:latest
     container_name: otel-collector
-    ports:
-      - "4317:4317" # OpenTelemetry gRPC
-      - "4318:4318" # OpenTelemetry HTTP
     volumes:
       - ./config/otel-collector-config.yaml:/etc/otel-collector-config.yaml
     command: [ "--config=/etc/otel-collector-config.yaml" ]
@@ -54,8 +49,6 @@ services:
   victoriametrics:
     image: victoriametrics/victoria-metrics
     container_name: victoriametrics
-    ports:
-      - "8428:8428"
     volumes:
       - victoriametrics_data:/victoria-metrics-data
 
